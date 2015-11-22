@@ -23,6 +23,7 @@ find_package(catkin REQUIRED COMPONENTS
   			message_runtime
   			roscpp
   			std_msgs
+        geometry_msgs
         cmake_modules
 )
 
@@ -132,7 +133,7 @@ endif()
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES vicon_torio
-  CATKIN_DEPENDS message_runtime roscpp std_msgs vicon_listener
+  CATKIN_DEPENDS message_runtime roscpp std_msgs vicon_listener geometry_msgs
 #  DEPENDS system_lib
 )
 

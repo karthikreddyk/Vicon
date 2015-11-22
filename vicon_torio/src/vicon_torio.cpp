@@ -1,11 +1,10 @@
 #include <ros/ros.h>
 #include "std_msgs/String.h"
-#include <geometry_msgs/Point.h>
+#include <iomanip>          //for std::fixed and std::setprecision
+#include <ros/console.h>
 
-#include <vicon_listener/structs.h>
-#include <vicon_listener/pose.hpp>
-#include <vicon_listener/connection.hpp>
 #include <sstream>
+#include <geometry_msgs/Twist.h>
 
 #include <vicon_bridge/Markers.h>
 
@@ -16,73 +15,23 @@
 #include <vector>
 #include <boost/serialization/vector.hpp>
 
-
-class server
+void poseReceiver(const geometry_msgs::Twist::ConstPtr& posemsg)
 {
-public:
-  server(boost::asio::io_service& io_service, unsigned short port, pose p)
-    : acceptor_(io_service,
-        boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
-  {
-    p.xtrans;
-    p.ytrans;
-    p.ztrans;
-    p.roll;
-    p.pitch;
-    p.yaw;
-    posevec_.push_back(p);
+  ROS_INFO_STREAM(std::setprecision(4) << std::fixed 
+                << "linear position: (" << posemsg -> linear /*.x << 
+                  ", " << posemsg.linear.y << ", " << posemsg.linear.z*/ << ")"
+                << "\nangular position: (" << posemsg -> angular/*.x << 
+                  ", " << posemsg.angular.y << ", " << posemsg.angular.z*/ <<")");
+}
 
-    // Start an accept operation for a new connection.
-    connection_ptr new_conn(new connection(acceptor_.get_io_service()));
-    acceptor_.async_accept(new_conn->socket(),
-        boost::bind(&server::handle_accept, this,
-          boost::asio::placeholders::error, new_conn));
-  }
-
-  /// Handle completion of a accept operation.
-  void handle_accept(const boost::system::error_code& e, connection_ptr conn)
-  {
-    if (!e)
-    {
-      conn->async_write(posevec_,
-          boost::bind(&server::handle_write, this,
-            boost::asio::placeholders::error, conn));
-    }
-
-    // Start an accept operation for a new connection.
-    connection_ptr new_conn(new connection(acceptor_.get_io_service()));
-    acceptor_.async_accept(new_conn->socket(),
-        boost::bind(&server::handle_accept, this,
-          boost::asio::placeholders::error, new_conn));
-  }
-
-  /// Handle completion of a write operation.
-  void handle_write(const boost::system::error_code& e, connection_ptr conn)
-  {
-  }
-
-  ~server()
-  {
-       ROS_WARN("\nServer destructor called.");
-  }
-
-private:
-  boost::asio::ip::tcp::acceptor acceptor_;
-  std::vector<pose> posevec_;
-};
 
 int main(int argc, char **argv)
 {
-/*  ros::init(argc, argv, "RIO_Sender");
+  ros::init(argc, argv, "vicon_torio", ros::init_options::AnonymousName);
+  ros::NodeHandle n_rio;
 
-  ros::NodeHandle n;
-  ros::Publisher sendit = n.advertise<std_msgs::String>("send", 1000);
-  ros::Rate loop_rate(10);
+  ros::Subscriber posesub = n_rio.subscribe("pose_", 1000, &poseReceiver);
 
-  while (ros::ok())
-  {
-    std_msgs::String msg;
-    ss << ""
-  }*/
+  ros::spin();
   return 0;
 }

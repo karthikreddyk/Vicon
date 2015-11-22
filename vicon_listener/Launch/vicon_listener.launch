@@ -1,0 +1,15 @@
+<launch>
+
+	<arg name="publish_tf"        default="false" />
+	<arg name="machine"           default="localhost" />
+	<arg name="start_manager"     default="true" />
+	<arg name="use_machine"       default="true" />
+
+	<machine name="localhost" address="localhost" if="$(arg use_machine)"/>
+
+	<node pkg="vicon_listener" type="vicon_listener" name="Vicon_Listener" output="screen">
+		<param name="labview_hostport"           type="str"   value="127.0.0.2:82" />
+	 node>
+
+
+</launch>

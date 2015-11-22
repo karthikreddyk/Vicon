@@ -23,12 +23,13 @@ find_package(catkin REQUIRED COMPONENTS
   diagnostic_updater
   dynamic_reconfigure
   geometry_msgs
-  message_generation
+#  message_generation
 #  message_runtime
   roscpp
   rospy
   tf
   cmake_modules         #https://github.com/ros/cmake_modules/blob/0.3-devel/README.md#usage
+  roslaunch              #http://wiki.ros.org/roslaunch#Catkin
 )
 
 ## System dependencies are found with CMake's conventions
@@ -124,10 +125,10 @@ find_package(cmake_modules REQUIRED)
 
 ## Generate added messages and services with any dependencies listed here
 
-#generate_messages(
-#   DEPENDENCIES
-#  geometry_msgs
-# )
+generate_messages(
+   DEPENDENCIES
+  geometry_msgs
+ )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##

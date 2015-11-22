@@ -4,33 +4,31 @@ Nov. 11, 2015*/
 
 #include "ros/ros.h"
 #include "std_msgs/String.h"
+#include <ros/callback_queue.h>         //for multithreaded spinning
+#include <ros/console.h>
+//#include <spinner.h>
 
 #include <string>
 #include <fstream>
 
 #include <vicon_bridge/Markers.h>
 #include <vicon_listener/structs.h>
+#include <geometry_msgs/Twist.h>
 
 unsigned short port = 801;
-ros::NodeHandle n_rpy;
-ros::NodeHandle n_xyz;
 
 class Receiver
-{
+{      
 public:
+    Receiver()
+        :  save(false), spinner(0), n_rpy("~"), n_xyz("~")
+    {  
+    }
+
     enum Mode
     {
         SAVE
     };
-
-private:
-    Mode mode;
-
-public:
-    Receiver()
-        :  save(false)
-    {  
-    }
 
     void callback(const vicon_bridge::Markers::ConstPtr& markers_msg)
     {   
@@ -58,7 +56,7 @@ public:
 
         headmarkers markers = {forehead, leftcheek, rightcheek, chin};
         facemidpts midFacePoints_       = midpoint(markers);
-        }
+    }
 
     //Here, I basically find the midpoint of the four pts intersecting at the middle of the face
     facemidpts midpoint(headmarkers markers)                     
@@ -74,27 +72,7 @@ public:
 
         facepoints = {xm, ym, zm};
 
-        std::cout << "\nMidface(x, y, z): (" << facepoints.x << ", " << facepoints.y << ", " << facepoints.z << ")" << std::endl;
-
-        ros::Publisher trans_pub = n_xyz.advertise<std_msgs::String>("trans", 1000);
-        ros::Rate  loop_rate(10);
-        while(ros::ok())
-        {
-            std_msgs::String msg;
-
-            std::stringstream ss;
-            // ss << std::fixed << std::setfill('0') << std::setprecision(5) << xm << ", " << ym << ", " << zm;
-            msg.data = ss.str();
-
-            ROS_INFO("%s", msg.data.c_str());
-
-            trans_pub.publish(msg);
-
-            ros::spinOnce();                //to enable callbacks getting called
-            loop_rate.sleep();
-        }
-
-        modgramschmidt(markers);                    //compute stable orthogonalization and normalization
+        modgramschmidt(markers, facepoints);                    //compute stable orthogonalization and normalization
 
         return facepoints;
     }
@@ -102,7 +80,7 @@ public:
 //   Now I compute the Gram-Schmidt orthonormalization and orthogonalization for the four vectors
 //     https://en.m.wikipedia.org/wiki/Gram%E2%80%93Schmidt_process#CITEREFGolubVan_Loan1996
 //     http://www.cs.cmu.edu/~kiranb/animation/p245-shoemake.pdf
-    void modgramschmidt(headmarkers markers)
+    void modgramschmidt(headmarkers markers, facemidpts facepoints)
     {
         //define req'd sys of finitely independent set
         Vector3d v1(markers.foreo.x, markers.foreo.y, markers.foreo.z);
@@ -148,7 +126,7 @@ public:
         orth gonal  = {u1, u2, u3, u4};
         orth normal = {e1, e2, e3, e4};
 
-        rot(normal);                                //compute rotation matrix
+        rot(normal, facepoints);                                //compute rotation matrix
     }
 
     Vector3d proj(Vector3d u, Vector3d v)                       //computes the projection of vector v onto u.
@@ -168,7 +146,7 @@ public:
         midface.close();
     }
 
-    MatrixXd rot(orth normal)
+    MatrixXd rot(orth normal, facemidpts facepoints)
     {
         Vector3d col1, col2, col3, col4;
         col1 = normal.e1;                       //each of these are 3 X 1 in dim
@@ -205,65 +183,79 @@ public:
             std::cout << "R is not unitary." << "\t" << "|R|: " << det << std::endl;
         }
 
-        rollpy(R);                  //computes roll-pitch-yaw motion
+        rollpy(R, facepoints);                  //computes roll-pitch-yaw motion
         return R;
     }
 
     //From Rotation Matrix, find rpy
-    Vector3f rollpy(MatrixXd R)
+    Vector3f rollpy(MatrixXd R, facemidpts facepoints)
     {
         float sp, cp;
         MatrixXf Rf = R.cast<float>();
 
-        ros::Publisher rot_pub = n_rpy.advertise<std_msgs::String>("rot_" , 1000);
-        ros::Rate loop_rate2(10);                       //publish at 10Hz
-        std_msgs::String rotmsg;
-        std::stringstream os;
-        
-        if (abs(R(0,0)) < .001 & abs(R(1,0)) < .001)
-        {
-            // singularity
-            rpy(0) = 0;
-            rpy(1) = atan2(-Rf(2,0), Rf(0,0));
-            rpy(2) = atan2(-Rf(1,2), Rf(1,1));
-            std::cout << "rpy: " << rpy.transpose() << std::endl;
+        ros::Publisher posemsg_pub= n_pose.advertise<geometry_msgs::Twist>("pose_" , 1000);
+        ros::Rate loop_rate(5);                       //publish at 5Hz
+        geometry_msgs::Twist posemsg;
 
-           while(ros::ok())
-            {
-                os << std::fixed << std::setfill('0') << std::setprecision(5) << rpy(0) << ", " << rpy(1) << ", " << rpy(2);
-                rotmsg.data = os.str();
+    
+        spinner.start(); 
 
-                ROS_INFO("%s", rotmsg.data.c_str());
-
-                rot_pub.publish(rotmsg);
-
-                ros::spinOnce();
-
-                loop_rate2.sleep();                     //wait while messages arrive
-            }
-        }
-        else
+        while(ros::ok())
         {            
-            rpy(0) = atan2(Rf(1,0), Rf(0,0));
-            sp = sin(rpy(0));
-            cp = cos(rpy(0));
-            rpy(1) = atan2(-Rf(2,0), cp * Rf(0,0) + sp * Rf(1,0));
-            rpy(2) = atan2(sp * Rf(0,2) - cp * Rf(1,2), cp*Rf(1,1) - sp*Rf(0,1));
-            std::cout << "rpy: " << rpy.transpose() << std::endl;
 
-            while(ros::ok())
-             {
-                 os << std::fixed << std::setfill('0') << std::setprecision(5) << rpy(0) << ", " << rpy(1) << ", " << rpy(2);
-                 rotmsg.data = os.str();
+            if (abs(R(0,0)) < .001 & abs(R(1,0)) < .001)
+            {
+                // singularity
+                rpy(0) = 0;
+                rpy(1) = atan2(-Rf(2,0), Rf(0,0));
+                rpy(2) = atan2(-Rf(1,2), Rf(1,1));
 
-                 ROS_INFO("%s", rotmsg.data.c_str());
+                posemsg.linear.x = facepoints.x;
+                posemsg.linear.y = facepoints.y;
+                posemsg.linear.z = facepoints.z;
 
-                 rot_pub.publish(rotmsg);
+                posemsg.angular.x = rpy(0);
+                posemsg.angular.y = rpy(1);
+                posemsg.angular.z = rpy(2);
+           
+                posemsg_pub.publish(posemsg);
 
-                 ros::spinOnce();
+/*                ROS_INFO_STREAM("Head Translation: %s", posemsg.linear);
+                ROS_INFO("Head RPY Angles: %s", posemsg.angular);*/
 
-                 loop_rate2.sleep();                     //wait while messages arrive
-             }
+                posemsg_pub.publish(posemsg);
+
+                //ros::spinOnce();                //to enable callbacks getting called
+                loop_rate.sleep();
+            }
+
+            else
+            {   
+                rpy(0) = atan2(Rf(1,0), Rf(0,0));
+                sp = sin(rpy(0));
+                cp = cos(rpy(0));
+                rpy(1) = atan2(-Rf(2,0), cp * Rf(0,0) + sp * Rf(1,0));
+                rpy(2) = atan2(sp * Rf(0,2) - cp * Rf(1,2), cp*Rf(1,1) - sp*Rf(0,1));
+                
+                posemsg.linear.x = facepoints.x;
+                posemsg.linear.y = facepoints.y;
+                posemsg.linear.z = facepoints.z;
+
+                posemsg.angular.x = rpy(0);
+                posemsg.angular.y = rpy(1);
+                posemsg.angular.z = rpy(2);
+           
+                posemsg_pub.publish(posemsg);
+
+                // ROS_INFO("Head Translation: %s", posemsg.linear);
+                // ROS_INFO("Head RPY Angles: %s", posemsg.angular);
+
+                posemsg_pub.publish(posemsg);
+
+                //ros::spinOnce();                //to enable callbacks getting called
+                loop_rate.sleep();
+            }        
+            ros::waitForShutdown();
         }
 
         return rpy;
@@ -275,18 +267,27 @@ public:
     {
         ROS_INFO("\nDestructor Called.");
     }
+    private:
+        float xm, ym, zm;
+        unsigned short port;
+        bool save; 
 
+        Vector3f rpy;
+        facemidpts facepoints;
+        ros::NodeHandle n_rpy;
+        ros::NodeHandle n_xyz;
+        ros::NodeHandle n_pose;
 
-    
-protected:
-    float xm, ym, zm;
-    geometry_msgs::Point_<std::allocator<void> > chin, forehead, leftcheek, rightcheek;
-    std::string foreheadname, leftcheekname, rightcheekname, chinname;
-    unsigned short port; bool save; 
-    facemidpts facepoints;
-    Vector3f rpy;
+        std::string foreheadname, \
+                    leftcheekname, \
+                    rightcheekname, \
+                    chinname;
 
-// friend server;               //somehow I could not get g++ to compile by exposing everything within  Receiver to server
+        Mode mode;
+
+        ros::AsyncSpinner spinner;
+        geometry_msgs::Point_<std::allocator<void> > chin, forehead, leftcheek, rightcheek;
+    // friend server;                       //somehow I could not get g++ to compile by exposing everything within  Receiver to server
 };
 
 void help()
@@ -306,21 +307,22 @@ int main(int argc, char **argv)
     ros::NodeHandle nm;
     Receiver::Mode mode = Receiver::SAVE;
     Receiver obj;
-    ros::Subscriber sub = nm.subscribe("vicon/markers", 1000, &Receiver::callback, &obj ); 
-    
+
+
+    ros::Subscriber sub = nm.subscribe("vicon/markers", 1000, &Receiver::callback, &obj );    
        try
         {
 
             if(argc != (1 || 2))
                 {
                   help();
-                  ros::shutdown();
+                  //ros::spinOnce();
                   return 1;
                 }
 
             else if (argc = 1)
             {   
-              ros::spin();    
+              //ros::spinOnce();    
               return 1;
             }
 
@@ -332,7 +334,7 @@ int main(int argc, char **argv)
                     mode = Receiver::SAVE;
                 }
 
-                ros::spin();    
+                //ros::spinOnce();    
                 return 1;
             }
         }
@@ -341,6 +343,12 @@ int main(int argc, char **argv)
           {
             std::cerr << "Exception: " << e.what() << "\n";
           }
+
+    ros::spin();
+
+    ros::shutdown();
+
+  return 0;
 }
     
     

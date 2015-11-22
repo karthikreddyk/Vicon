@@ -6,7 +6,8 @@ Nov. 11, 2015*/
 #include "std_msgs/String.h"
 #include <ros/callback_queue.h>         //for multithreaded spinning
 #include <ros/console.h>
-//#include <spinner.h>
+#include <tf/transform_broadcaster.h>
+#include <thread>
 
 #include <string>
 #include <fstream>
@@ -16,19 +17,26 @@ Nov. 11, 2015*/
 #include <geometry_msgs/Twist.h>
 
 unsigned short port = 801;
+std::string Superchick_name = "Superchicko";
 
 class Receiver
-{      
-public:
-    Receiver()
-        :  save(false), spinner(0), n_rpy("~"), n_xyz("~")
-    {  
-    }
+{ 
+    private:
+      std::vector<std::thread> threads;
+      // std::thread posePublisher;
+      ros::NodeHandle priv_nh;
+      ros::AsyncSpinner spinner;
 
+public:
     enum Mode
     {
         SAVE
     };
+
+    Receiver(const ros::NodeHandle &n = ros::NodeHandle(), const ros::NodeHandle &priv_nh = ros::NodeHandle("~") )
+        :  save(false), spinner(0), n_pose("~"), priv_nh(priv_nh)
+    {  
+    }
 
     void callback(const vicon_bridge::Markers::ConstPtr& markers_msg)
     {   
@@ -58,6 +66,13 @@ public:
         facemidpts midFacePoints_       = midpoint(markers);
     }
 
+    ~Receiver()
+    {
+        ROS_INFO("\nDestructor Called.");
+    }
+
+
+public:
     //Here, I basically find the midpoint of the four pts intersecting at the middle of the face
     facemidpts midpoint(headmarkers markers)                     
     {
@@ -222,10 +237,13 @@ public:
 
 /*                ROS_INFO_STREAM("Head Translation: %s", posemsg.linear);
                 ROS_INFO("Head RPY Angles: %s", posemsg.angular);*/
-
+                for(size_t i = 0; i < threads.size(); ++i)
+                {
+                    threads[i] = std::thread();
+                }
                 posemsg_pub.publish(posemsg);
 
-                //ros::spinOnce();                //to enable callbacks getting called
+                ros::spinOnce();                //to enable callbacks getting called
                 loop_rate.sleep();
             }
 
@@ -247,12 +265,7 @@ public:
            
                 posemsg_pub.publish(posemsg);
 
-                // ROS_INFO("Head Translation: %s", posemsg.linear);
-                // ROS_INFO("Head RPY Angles: %s", posemsg.angular);
-
-                posemsg_pub.publish(posemsg);
-
-                //ros::spinOnce();                //to enable callbacks getting called
+                ros::spinOnce();                //to enable callbacks getting called
                 loop_rate.sleep();
             }        
             ros::waitForShutdown();
@@ -261,16 +274,42 @@ public:
         return rpy;
     }
 
-
-
-    ~Receiver()
+        // Receiver receiver;
+    void posePublisher()
     {
-        ROS_INFO("\nDestructor Called.");
+        static tf::TransformBroadcaster broadcast;
+        tf::StampedTransform poseOpt;
+        tf::Transform transform;
+        ros::Time now = ros::Time::now();
+
+        tf::Vector3 (facepoints.x, facepoints.y, facepoints.z) ;
+        tf::Quaternion q;
+        q.setRPY(rpy(0), rpy(1), rpy(2));
+        transform.setRotation(q);
+
+        poseOpt = tf::StampedTransform(transform, now, "worldpose", Superchick_name);
+        
+        for(;ros::ok();)
+        {
+          now = ros::Time::now();
+          poseOpt.stamp_ = now;
+
+          broadcast.sendTransform(poseOpt);
+
+          std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
     }
+
+    bool  start()
+    {
+        if(publishTF);
+    }
+
     private:
         float xm, ym, zm;
         unsigned short port;
         bool save; 
+        bool publishTF;
 
         Vector3f rpy;
         facemidpts facepoints;
@@ -285,9 +324,12 @@ public:
 
         Mode mode;
 
-        ros::AsyncSpinner spinner;
         geometry_msgs::Point_<std::allocator<void> > chin, forehead, leftcheek, rightcheek;
     // friend server;                       //somehow I could not get g++ to compile by exposing everything within  Receiver to server
+        bool initialize()
+        {
+            priv_nh.param("publish_tf", publishTF, false);
+        }
 };
 
 void help()
@@ -316,13 +358,13 @@ int main(int argc, char **argv)
             if(argc != (1 || 2))
                 {
                   help();
-                  //ros::spinOnce();
+                  ros::spinOnce();
                   return 1;
                 }
 
             else if (argc = 1)
             {   
-              //ros::spinOnce();    
+              ros::spinOnce();    
               return 1;
             }
 
@@ -334,7 +376,7 @@ int main(int argc, char **argv)
                     mode = Receiver::SAVE;
                 }
 
-                //ros::spinOnce();    
+                ros::spinOnce();    
                 return 1;
             }
         }
@@ -346,7 +388,7 @@ int main(int argc, char **argv)
 
     ros::spin();
 
-    ros::shutdown();
+    // ros::shutdown();
 
   return 0;
 }

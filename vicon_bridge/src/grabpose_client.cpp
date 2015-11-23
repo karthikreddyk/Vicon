@@ -6,6 +6,7 @@
 #include "ros/service_manager.h"
 #include "ros/service.h"
 #include <ros/datatypes.h>
+#include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <stdio.h>
@@ -23,10 +24,11 @@ int main(int argc, char** argv)
 
 	if (argc != 4)
 	  {
-	    ROS_INFO_STREAM("\nusage: rosrun vicon_bridge grabpose <subject_name> <segment_name> <service> \n"
-	    				<< std::setw(15) << "You could check for available service with rosservice list\n"
-	    				<< std::setw(15) << "To subscribe to pose," << "set <service> to : <grab_vicon_pose>\n"	    				
-	    				<< std::setw(15) << "To subscribe to calibration segment:" << "Set <service> to <calibrate_segment>");
+	    ROS_INFO_STREAM("\n\n" << 
+	    				"                   usage: rosrun vicon_bridge grabpose <subject_name> <segment_name> <service> \n"
+	    				<< std::setw(35) << "To subscribe to pose, " << "set <service> to <grab_vicon_pose>\n"	    				
+	    				<< std::setw(55) << "To subscribe to calibration segment, " << "set <service> to <calibrate_segment>\n"
+	    				<< std::setw(75) << "You could check for available service with rosservice list\n");
 	    return 1;
 	  }
 
@@ -56,24 +58,31 @@ int main(int argc, char** argv)
 	const ros::M_string & 	header_values = ros::M_string();											
 	ros::ServiceClient vicon_pose =	nc.serviceClient<vicon_bridge::viconGrabPose>(service_name.str(), persistent, header_values);
 
-	//ros::Rate looper(100);	
+	ros::Rate looper(100);			//set to 30Hz
+
+	float x, y, z, roll, pitch, yaw;
 
 	vicon_bridge::viconGrabPose srv;
 	do
 	{
 		srv.request.subject_name =  subject; 
 		srv.request.segment_name =  segment;
-		srv.request.n_measurements = 1000;
+		srv.request.n_measurements = 2;
 		if (vicon_pose.call(srv))
 		{
-			ROS_INFO_STREAM("Translation: (" << srv.response.pose.pose.position.x << ", " <<
-												  srv.response.pose.pose.position.y << ", " <<
-												  srv.response.pose.pose.position.z <<")");
+			x = srv.response.pose.pose.position.x;
+			y = srv.response.pose.pose.position.y;
+			z = srv.response.pose.pose.position.z;
 
-			ROS_INFO_STREAM("Orientation: (" << srv.response.pose.pose.orientation.x << ", " <<
-												  srv.response.pose.pose.orientation.y << ", " <<
-												  srv.response.pose.pose.orientation.z <<")");
-			//looper.sleep();
+			roll 	= srv.response.pose.pose.orientation.x;
+			pitch 	= srv.response.pose.pose.orientation.y;
+			yaw		= srv.response.pose.pose.orientation.z;
+
+			ROS_INFO_STREAM(std::setw('0') << std::fixed << std::setprecision(4) << "Translation: (" << x << ", " << y << ", " << z <<")");
+
+			ROS_INFO_STREAM(std::setw('0') << std::fixed << std::setprecision(4) << "Orientation: (" << roll << ", " << pitch << ", " << yaw <<")");
+
+			looper.sleep();
 		}
 		else
 		{

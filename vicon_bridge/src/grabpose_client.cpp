@@ -1,15 +1,8 @@
 #include <ros/ros.h>
 #include <vicon_bridge/viconGrabPose.h>
-#include <geometry_msgs/Pose.h>
-#include <ros/service_client.h>
-#include "ros/connection.h"
-#include "ros/service_manager.h"
-#include "ros/service.h"
-#include <ros/datatypes.h>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
-#include <stdio.h>
 
 std::string subject, segment;
 std::string service;

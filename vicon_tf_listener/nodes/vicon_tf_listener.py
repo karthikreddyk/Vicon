@@ -1,6 +1,7 @@
 #!/usr/bin/env python  
 import roslib
 roslib.load_manifest('vicon_tf_listener')
+roslib.load_manifest('vicon_bridge')
 import rospy
 import math
 import tf
@@ -8,20 +9,20 @@ import geometry_msgs.msg
 import turtlesim.srv
 
 if __name__ == '__main__':
-    rospy.init_node('tf_vicon')
+    rospy.init_node('vicon_tf_listener')
 
     listener = tf.TransformListener()
 
     rospy.wait_for_service('spawn')
     spawner = rospy.ServiceProxy('spawn', turtlesim.srv.Spawn)
-    spawner(4, 2, 0, 'vicon/markers')
+    spawner(4, 2, 0, 'vicon/ladyheadSat/root')
 
-    head_vel = rospy.Publisher('vicon/markers', geometry_msgs.msg.Twist,queue_size=1000)
+    head_vel = rospy.Publisher('vicon/ladyheadSat/root', geometry_msgs.msg.Twist, queue_size=1000)
 
     rate = rospy.Rate(10.0)
     while not rospy.is_shutdown():
         try:
-            (trans,rot) = listener.lookupTransform(tf_ref_frame_id_, tracked_segment, rospy.Time(0))
+            (trans,rot) = listener.lookupTransform('/vicon/ladyheadSat', '/root', rospy.Time(0))
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             continue
 

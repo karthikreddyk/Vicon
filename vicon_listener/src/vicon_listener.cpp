@@ -8,9 +8,10 @@ Nov. 11, 2015*/
 #include <ros/console.h>
 #include <tf/transform_broadcaster.h>
 #include <thread>
-
+#include <iomanip>
 #include <string>
 #include <fstream>
+#include <iostream>
 
 #include <vicon_bridge/Markers.h>
 #include <vicon_listener/structs.h>
@@ -23,8 +24,7 @@ class Receiver
 { 
     private:
       std::vector<std::thread> threads;
-      // std::thread posePublisher;
-      ros::NodeHandle priv_nh;
+      ros::NodeHandle n_pose, priv_nh;     
       ros::AsyncSpinner spinner;
 
 public:
@@ -33,8 +33,9 @@ public:
         SAVE
     };
 
-    Receiver(const ros::NodeHandle &n = ros::NodeHandle(), const ros::NodeHandle &priv_nh = ros::NodeHandle("~") )
-        :  save(false), spinner(0), n_pose("~"), priv_nh(priv_nh)
+    Receiver(const ros::NodeHandle &nm = ros::NodeHandle("~"), const ros::NodeHandle &n_pose = ros::NodeHandle("~"), \
+             const ros::NodeHandle &priv_nh = ros::NodeHandle("~") )
+        :  save(false), spinner(1), n_pose("~"), priv_nh(priv_nh), mode(SAVE)
     {  
     }
 
@@ -82,7 +83,7 @@ public:
 
         if (save)
           {
-            savepoints(xm, ym, zm);
+            savepoints(/*xm, ym, zm*/);
           }        
 
         facepoints = {xm, ym, zm};
@@ -152,7 +153,16 @@ public:
         return projuv;
     }
 
-    void savepoints(float xm, float ym, float zm)
+/*    switch(mode)
+    {
+        case SAVE:
+        savepoints();
+        break;
+        case 2:
+        std::cout << "saving points to file" << std::endl;
+    }*/
+
+    void savepoints(/*float xm, float ym, float zm*/)
     {
         //Now we write the points to a text file for visualization processing
         std::ofstream midface;
@@ -243,7 +253,7 @@ public:
                 }
                 posemsg_pub.publish(posemsg);
 
-                ros::spinOnce();                //to enable callbacks getting called
+                //ros::spinOnce();                //to enable callbacks getting called
                 loop_rate.sleep();
             }
 
@@ -265,11 +275,13 @@ public:
            
                 posemsg_pub.publish(posemsg);
 
-                ros::spinOnce();                //to enable callbacks getting called
+                //ros::spinOnce();                //to enable callbacks getting called
                 loop_rate.sleep();
             }        
             ros::waitForShutdown();
         }
+
+        spinner.stop();
 
         return rpy;
     }
@@ -313,9 +325,6 @@ public:
 
         Vector3f rpy;
         facemidpts facepoints;
-        ros::NodeHandle n_rpy;
-        ros::NodeHandle n_xyz;
-        ros::NodeHandle n_pose;
 
         std::string foreheadname, \
                     leftcheekname, \
@@ -335,62 +344,51 @@ public:
 void help()
 {
   
-    std::cout<< "Error ******************************************************************\n";
-    std::cout <<  std::setw(20)  << "\nUsage: rosrun vicon_listener vicon_listener" << std::endl;
-    std::cout <<  std::setw(20) << "To Save facepoints: rosrun vicon_listener vicon_listener -s (or --save)\n" << std::endl;
+    ROS_INFO("Error ******************************************************************");
+    ROS_INFO_STREAM( std::setw(20)  << "\nUsage: rosrun vicon_listener vicon_listener" );
+    ROS_INFO_STREAM( std::setw(20) << "To Save facepoints: rosrun vicon_listener vicon_listener -s (or --save)");
 }
 
 
 int main(int argc, char **argv)
 {
-
-    ros::init(argc, argv, "listener");
-
-    ros::NodeHandle nm;
+    bool save;
     Receiver::Mode mode = Receiver::SAVE;
     Receiver obj;
 
+    ros::init(argc, argv, "listener");
+    try
+     {
+        if(argc > 1)
+             {
+               help();
+               //ros::spinOnce();
+               return 1;
+             }
 
+         else if (argc == 1)
+         {
+            save = atoi(argv[1]) == 0 ? false : true;
+            mode = Receiver::SAVE;
+            //ros::spinOnce();    
+            return 1;
+         }
+     }
+
+     catch (std::exception& e)
+       {
+         std::cerr << "Exception: " << e.what() << "\n";
+       }
+
+    ros::NodeHandle nm;
     ros::Subscriber sub = nm.subscribe("vicon/markers", 1000, &Receiver::callback, &obj );    
-       try
-        {
 
-            if(argc != (1 || 2))
-                {
-                  help();
-                  ros::spinOnce();
-                  return 1;
-                }
-
-            else if (argc = 1)
-            {   
-              ros::spinOnce();    
-              return 1;
-            }
-
-            else if (argc = 2)
-            {
-                std::string param(argv[2]);
-                if(param == "-s" || "--save")
-                {
-                    mode = Receiver::SAVE;
-                }
-
-                ros::spinOnce();    
-                return 1;
-            }
-        }
-
-        catch (std::exception& e)
-          {
-            std::cerr << "Exception: " << e.what() << "\n";
-          }
 
     ros::spin();
 
     // ros::shutdown();
 
-  return 0;
+  return 1;
 }
     
     

@@ -3,6 +3,7 @@
 #include <vicon_bridge/viconGrabPose.h>
 #include <geometry_msgs/Pose.h>
 #include <cstdlib>
+#include <stdio.h>
 
 std::string subject, segment;
 
@@ -18,7 +19,7 @@ std::string M_string()
                                                                 this);*/
     	//This is the service I want to subscribe to. Line 618. vicon_bridge.cpp.
 
-int main(int argc, char** argv)
+int main(int argc, char** argv[])
 {
 	ros::init(argc, argv, "cpp_listener");
 
@@ -32,8 +33,8 @@ int main(int argc, char** argv)
 	    return 1;
 	  }
 
-	subject = atoll(argv[1]);
-	segment = atoll(argv[2]);
+	subject = argv[1];
+	segment = argv[2];
 
 	std::string base_name = "vicon";
 

@@ -8,7 +8,7 @@
 	<machine name="localhost" address="localhost" if="$(arg use_machine)"/>
 
 	<node pkg="vicon_listener" type="vicon_listener" name="Vicon_Listener" output="screen">
-		<param name="labview_hostport"           type="str"   value="127.0.0.2:82" />
+		<param name="labview_hostport"           type="str"   value="192.168.1.5:82" />
 	 node>
 
 

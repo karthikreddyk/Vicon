@@ -6,10 +6,13 @@
 #include "ros/service_manager.h"
 #include "ros/service.h"
 #include <ros/datatypes.h>
+#include <iomanip>
 #include <sstream>
 #include <stdio.h>
 
 std::string subject, segment;
+std::string service;
+
 const std::string grabber = "grabpose_clent";
 
 int main(int argc, char** argv)
@@ -18,43 +21,42 @@ int main(int argc, char** argv)
 
 	ros::init(argc, argv, grabber, options);
 
-	if (argc != 3)
+	if (argc != 4)
 	  {
-	    ROS_INFO("usage: rosrun vicon_bridge grabpose <subject_name> <segment_name>");
+	    ROS_INFO_STREAM("\nusage: rosrun vicon_bridge grabpose <subject_name> <segment_name> <service> \n"
+	    				<< std::setw(15) << "You could check for available service with rosservice list\n"
+	    				<< std::setw(15) << "To subscribe to pose," << "set <service> to : <grab_vicon_pose>\n"	    				
+	    				<< std::setw(15) << "To subscribe to calibration segment:" << "Set <service> to <calibrate_segment>");
 	    return 1;
 	  }
 
   	for(size_t i = 1; i < (size_t)argc; ++i)
   	{
-    	std::string param(argv[i]);
-
-		subject = argv[1];
+    	
+    	subject = argv[1];
 		segment = argv[2];
+		service = argv[3];	
 	}
 
 	std::string base_name = "vicon";
 
-	std::string advertname = base_name + "/" + subject + "/" + segment;
+	std::string advertname = base_name + "/" + service ;
 
-	ROS_INFO_STREAM("base_name" << "/subject" << "/segment: \t" << base_name <<  "/" << subject  << "/" << segment);
+	ROS_INFO_STREAM("Subscribing to: /" << base_name <<  "/" << service << "\t on topic: " 
+					<< base_name <<  "/" << subject  << "/" << segment);
 
 	ros::NodeHandle nc;
 
 	std::ostringstream service_name;
-	service_name << base_name <<  "/" << subject  << "/" << segment;
+	service_name << base_name << "/" << service;
 
 	ros::service::waitForService(service_name.str());
 
-/*		ServiceClient ros::NodeHandle::serviceClient	(	const std::string & 	service_name,
-															bool 	persistent = false,
-															const M_string & 	header_values = M_string() 
-															)		[inline]*/	
 	bool persistent = false;
-	const ros::M_string & 	header_values = ros::M_string();															
-	// ros::ServiceClient vicon_pose =	nc.serviceClient<vicon_bridge::viconGrabPose>(service_name.str());
+	const ros::M_string & 	header_values = ros::M_string();											
 	ros::ServiceClient vicon_pose =	nc.serviceClient<vicon_bridge::viconGrabPose>(service_name.str(), persistent, header_values);
 
-	ros::Rate looper(10);	
+	//ros::Rate looper(100);	
 
 	vicon_bridge::viconGrabPose srv;
 	do
@@ -64,8 +66,14 @@ int main(int argc, char** argv)
 		srv.request.n_measurements = 1000;
 		if (vicon_pose.call(srv))
 		{
-			ROS_INFO_STREAM("Pose: " << srv.response.pose.pose.position << ")");
-			looper.sleep();
+			ROS_INFO_STREAM("Translation: (" << srv.response.pose.pose.position.x << ", " <<
+												  srv.response.pose.pose.position.y << ", " <<
+												  srv.response.pose.pose.position.z <<")");
+
+			ROS_INFO_STREAM("Orientation: (" << srv.response.pose.pose.orientation.x << ", " <<
+												  srv.response.pose.pose.orientation.y << ", " <<
+												  srv.response.pose.pose.orientation.z <<")");
+			//looper.sleep();
 		}
 		else
 		{

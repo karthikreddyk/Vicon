@@ -21,7 +21,7 @@ std::string M_string()
 
 int main(int argc, char** argv[])
 {
-	ros::init(argc, argv, "cpp_listener");
+	ros::init(argc, argv[], "cpp_listener");
 
 	const std::string& service_name = "grab_vicon_pose";
 	bool persistent = false;

@@ -77,6 +77,15 @@ target_link_libraries(tf_distort
 )
 add_dependencies(tf_distort ${PROJECT_NAME}_gencpp ${PROJECT_NAME}_gencfg)
 
+add_executable(grabpose src/grabpose_client.cpp)
+target_link_libraries(grabpose
+   ${catkin_LIBRARIES}
+   ${VICON_SDK_LIBRARY}
+   ${Boost_LIBRARIES}
+)
+
+add_dependencies(grabpose ${PROJECT_NAME}_gencpp)
+
 add_executable(testclient src/ViconDataStreamSDK_CPPTest.cpp)
 target_link_libraries(testclient 
     ${VICON_SDK_LIBRARY}

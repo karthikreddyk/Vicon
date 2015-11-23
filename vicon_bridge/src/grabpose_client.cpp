@@ -4,8 +4,13 @@
 #include <geometry_msgs/Pose.h>
 #include <cstdlib>
 
-std::string subject;
-std::string segment;
+std::string subject, segment;
+
+std::string M_string()
+{
+	std::string key = "Successful connection. Ose Patrick!"
+	return key;
+}
 
 /*    // Service Server
     ROS_INFO("setting up grab_vicon_pose service server ... ");
@@ -17,9 +22,13 @@ int main(int argc, char** argv)
 {
 	ros::init(argc, argv, "cpp_listener");
 
+	const std::string& service_name = "grab_vicon_pose";
+	bool persistent = false;
+	const M_string& header_values = M_string();
+
 	if (argc != 3)
 	  {
-	    ROS_INFO("usage: rosrun cpp_listener listener <subject_name> <segment_name>");
+	    ROS_INFO("usage: rosrun vicon_bridge grabpose <subject_name> <segment_name>");
 	    return 1;
 	  }
 
@@ -31,8 +40,10 @@ int main(int argc, char** argv)
 	std::string advertname = base_name + "/" + subject + "/" + segment;
 
 	ros::NodeHandle nc;
-	//ros::service::waitForService("grab_vicon_pose");
-	ros::ServiceClient vicon_pose = 	nc.serviceClient<vicon_bridge::viconGrabPose>("grab_vicon_pose");
+	ros::service::waitForService(service_name);
+	// ros::ServiceClient vicon_pose = 	nc.serviceClient<vicon_bridge::viconGrabPose>(service_name);
+	ros::ServiceClient vicon_pose = 	nc.serviceClient(service_name, persistent, \
+												header_values)			[inline]
 	vicon_bridge::viconGrabPose srv;
 
 	vicon_pose.call(srv);

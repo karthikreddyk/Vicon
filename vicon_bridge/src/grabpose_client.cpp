@@ -3,11 +3,86 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <string>
+
+#include <boost/asio.hpp>
+#include "boost/bind.hpp"
+#include "boost/date_time/posix_time/posix_time_types.hpp"
 
 std::string subject, segment;
 std::string service;
 
 const std::string grabber = "grabpose_clent";
+
+const short multicast_port = 30001;
+const int max_message_count = 2;				//because my head can never be more than 2m above the ground :)
+
+class sender
+{
+public:
+  sender(boost::asio::io_service& io_service,
+      const boost::asio::ip::address& multicast_address, 
+      float x, float y, float z, float roll, float pitch, float yaw)
+    : endpoint_(multicast_address, multicast_port),
+      socket_(io_service, endpoint_.protocol()),
+      timer_(io_service), x_(x), y_(y), z_(z), roll_(roll), pitch_(pitch), yaw_(yaw)
+  {
+    std::ostringstream os;
+    os << std::fixed << std::setfill ('0') << std::setprecision (4) << x_ 
+    				<< ", " << y_ << ", "<< z_ << ", "<< roll_ << ", "
+    				<< pitch_ << ", "<< ", "<< yaw_ ;
+    message_ = os.str();
+
+    socket_.async_send_to(
+        boost::asio::buffer(message_), endpoint_,
+        boost::bind(&sender::handle_send_to, this,
+          boost::asio::placeholders::error));
+
+    ROS_INFO_STREAM("Sent (x,y,z, r, p, y): "<< std::setw('0') << std::fixed << std::setprecision(4)<< message_ <<")");
+  }
+
+  void handle_send_to(const boost::system::error_code& error)
+  {
+    if (!error && x_ > max_message_count)
+    {
+      timer_.expires_from_now(boost::posix_time::seconds(1));
+      timer_.async_wait(
+          boost::bind(&sender::handle_timeout, this,
+            boost::asio::placeholders::error));
+    }
+  }
+
+  void handle_timeout(const boost::system::error_code& error)
+  {
+    if (!error )
+    {
+      std::ostringstream os;
+
+      os << std::fixed << std::setfill ('0') << std::setprecision (4) << x_ 
+    				   << ", " << y_ << ", "<< z_ << ", "<< roll_ << ", "
+    				   << pitch_ << ", "<< ", "<< yaw_ ;
+
+      message_ = os.str();
+
+      ROS_WARN("Message Timed Out. Please look into your send::handle_timeout function");
+
+      socket_.async_send_to(
+          boost::asio::buffer(message_), endpoint_,
+          boost::bind(&sender::handle_send_to, this,
+            boost::asio::placeholders::error));
+    }
+  }
+
+private:
+  boost::asio::ip::udp::endpoint endpoint_;
+  boost::asio::ip::udp::socket socket_;
+  boost::asio::deadline_timer timer_;
+  float x_, y_, z_;
+  float roll_, pitch_, yaw_;
+  std::string message_;
+
+};
+
 
 int main(int argc, char** argv)
 {
@@ -45,6 +120,9 @@ int main(int argc, char** argv)
 	std::ostringstream service_name;
 	service_name << base_name << "/" << service;
 
+	boost::asio::io_service io_service;
+	std::string multicast_address = "235.255.0.1";
+
 	ros::service::waitForService(service_name.str());
 
 	bool persistent = false;
@@ -71,9 +149,12 @@ int main(int argc, char** argv)
 			pitch 	= srv.response.pose.pose.orientation.y;
 			yaw		= srv.response.pose.pose.orientation.z;
 
-			ROS_INFO_STREAM(std::setw('0') << std::fixed << std::setprecision(4) << "Translation: (" << x << ", " << y << ", " << z <<")");
-
-			ROS_INFO_STREAM(std::setw('0') << std::fixed << std::setprecision(4) << "Orientation: (" << roll << ", " << pitch << ", " << yaw <<")");
+/*			ROS_INFO_STREAM(std::setw('0') << std::fixed << std::setprecision(4) << "Translation: (" << x << ", " << y << 
+																													", " << z <<")");
+			ROS_INFO_STREAM(std::setw('0') << std::fixed << std::setprecision(4) << "Orientation: (" << roll << ", " << 
+																											pitch << ", " << yaw <<")");*/
+			sender s(io_service, boost::asio::ip::address::from_string(multicast_address), x, y, z, roll, pitch, yaw);
+			io_service.run();
 
 			looper.sleep();
 		}

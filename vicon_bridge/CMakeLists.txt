@@ -10,7 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
     diagnostic_updater
 )
 
-find_package(Boost REQUIRED COMPONENTS thread)
+find_package(Boost REQUIRED COMPONENTS system thread)
 
 # Generate messages and services
 add_message_files(FILES
@@ -53,6 +53,8 @@ endif (CMAKE_SIZEOF_VOID_P MATCHES "8")
 find_library(VICON_SDK_LIBRARY ViconDataStreamSDK_CPP PATHS ${VICON_SDK_LINK_DIR})
 
 include_directories(src ${catkin_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} ${VICON_SDK_INCLUDE_DIR})
+
+link_directories(${Boost_LIBRARY_DIR})
 
 add_library(msvc_bridge src/msvc_bridge.cpp)
 

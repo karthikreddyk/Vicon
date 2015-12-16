@@ -6,6 +6,6 @@ Based on [Markus Achtelik's](https://github.com/markusachtelik) [ROS bridge](htt
 
 The package also provides the `ServiceClient` to the advertised pose `ServiceServer` consisting of translation and orientation quarternions and can be run with 
 
-<pre class="terminal"><code>rosrun vicon_bridge grabpose subject_name segment_name grab_vicon_pose</code></pre>
+<pre class="terminal"><code>rosrun vicon_bridge grabpose <subject_name> <segment_name> grab_vicon_pose</code></pre>
 
 It's been tested and verified on ROS_Indigo running Ubuntu Trusty. If you can verify that it works on Jade or Hydro, kindly leave a feedback on the [project's issues page](https://github.com/lakehanne/vicon/issues). 

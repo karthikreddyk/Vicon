@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <chrono>
 
 #include <boost/asio.hpp>
 #include "boost/bind.hpp"
@@ -30,7 +31,7 @@ public:
     std::ostringstream os;
     os << std::fixed << std::setfill ('0') << std::setprecision (4) << x_ 
     				<< ", " << y_ << ", "<< z_ << ", "<< roll_ << ", "
-    				<< pitch_ << ", "<< ", "<< yaw_ ;
+    				<< pitch_ << ", "<< yaw_ ;
     message_ = os.str();
 
     socket_.async_send_to(
@@ -60,7 +61,7 @@ public:
 
       os << std::fixed << std::setfill ('0') << std::setprecision (4) << x_ 
     				   << ", " << y_ << ", "<< z_ << ", "<< roll_ << ", "
-    				   << pitch_ << ", "<< ", "<< yaw_ ;
+    				   << pitch_ << ", "<< yaw_ ;
 
       message_ = os.str();
 
@@ -82,6 +83,12 @@ private:
   std::string message_;
 
 };
+
+void measuretime()
+{
+
+
+}
 
 
 int main(int argc, char** argv)
@@ -129,18 +136,27 @@ int main(int argc, char** argv)
 	const ros::M_string & 	header_values = ros::M_string();											
 	ros::ServiceClient vicon_pose =	nc.serviceClient<vicon_bridge::viconGrabPose>(service_name.str(), persistent, header_values);
 
-	ros::Rate looper(100);			//set to 30Hz
+	//ros::Rate looper(30);			//set to 30Hz
 
 	float x, y, z, roll, pitch, yaw;
 
-	vicon_bridge::viconGrabPose srv;
+	double elapsed;
+	size_t frameCount = 0;
+	double fps = 0;
+	
+
 	do
 	{
+		vicon_bridge::viconGrabPose srv;
 		srv.request.subject_name =  subject; 
 		srv.request.segment_name =  segment;
 		srv.request.n_measurements = 2;
+		std::chrono::time_point<std::chrono::high_resolution_clock> begin, now; 
+		begin = std::chrono::high_resolution_clock::now();
+
 		if (vicon_pose.call(srv))
 		{
+			double start = ros::Time::now().toSec();
 			x = srv.response.pose.pose.position.x;
 			y = srv.response.pose.pose.position.y;
 			z = srv.response.pose.pose.position.z;
@@ -154,9 +170,27 @@ int main(int argc, char** argv)
 			ROS_INFO_STREAM(std::setw('0') << std::fixed << std::setprecision(4) << "Orientation: (" << roll << ", " << 
 																											pitch << ", " << yaw <<")");*/
 			sender s(io_service, boost::asio::ip::address::from_string(multicast_address), x, y, z, roll, pitch, yaw);
+			double end = ros::Time::now().toSec();
+
+			double diff = end - start ;
+			// ROS_INFO_STREAM("elapsed: " << std::setw('0') << std::fixed << std::setprecision(4) << diff*1000 \
+											// << " (ms)"<< " fps: " << 1/diff/1000 << "(Hz) ");
+
+			now = std::chrono::high_resolution_clock::now();  
+			++frameCount;
+			elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - begin).count() / 1000.0;
+
+			if(elapsed >= 1)
+			{
+			  fps = frameCount / elapsed;
+			  ROS_INFO_STREAM("fps: " << fps << "Hz ( " << elapsed / frameCount * 1000.0 << " ms)");
+			  begin = now;
+			  frameCount = 0;
+			}
+
 			io_service.run();
 
-			looper.sleep();
+			//looper.sleep();
 		}
 		else
 		{

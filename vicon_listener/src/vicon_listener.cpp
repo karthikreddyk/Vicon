@@ -17,8 +17,86 @@ Nov. 11, 2015*/
 #include <vicon_listener/structs.h>
 #include <geometry_msgs/Twist.h>
 
-unsigned short port = 801;
-std::string Superchick_name = "Superchicko";
+#include <boost/asio.hpp>
+#include "boost/bind.hpp"
+#include "boost/date_time/posix_time/posix_time_types.hpp"
+
+const std::string Superchick_name = "Superchicko";
+std::string listener = "vicon_listener";
+
+std::string subject, segment;
+
+const short multicast_port = 30001;
+const int max_message_count = 1;                //because my head can never be more than 2m above the ground :)
+
+class sender
+{
+public:
+  sender(boost::asio::io_service& io_service,
+      const boost::asio::ip::address& multicast_address, 
+      float  x, float y, float z, float roll, \
+      float pitch, float yaw)
+    : endpoint_(multicast_address, multicast_port),
+      socket_(io_service, endpoint_.protocol()),
+      timer_(io_service), x_(x), y_(y), z_(z), \
+                        roll_(roll), pitch_(pitch), yaw_(yaw), message_count_(0)
+  {
+    std::ostringstream os;
+    os << std::fixed << std::setfill ('0') << std::setprecision (4) << x_ 
+                    << ", " << y_ << ", "<< z_ << ", "<< roll_ << ", "
+                    << pitch_ << ", "<< yaw_ ;
+    message_ = os.str();
+
+    socket_.async_send_to(
+        boost::asio::buffer(message_), endpoint_,
+        boost::bind(&sender::handle_send_to, this,
+          boost::asio::placeholders::error));
+
+    ROS_INFO_STREAM("Sent (x,y,z, r, p, y): "<< std::setw('0') << std::fixed << std::setprecision(4)<< message_ <<")");
+  }
+
+  void handle_send_to(const boost::system::error_code& error)
+  {
+    if (!error && message_count_ < max_message_count)
+    {
+      timer_.expires_from_now(boost::posix_time::seconds(1));
+      timer_.async_wait(
+          boost::bind(&sender::handle_timeout, this,
+            boost::asio::placeholders::error));
+    }
+  }
+
+  void handle_timeout(const boost::system::error_code& error)
+  {
+    if (!error )
+    {
+      std::ostringstream os;
+
+      os << std::fixed << std::setfill ('0') << std::setprecision (4) << x_ 
+                       << ", " << y_ << ", "<< z_ << ", "<< roll_ << ", "
+                       << pitch_ << ", "<< yaw_ ;
+
+      message_ = os.str();
+
+      ROS_WARN("Message Timed Out. Please look into your send::handle_timeout function");
+
+      socket_.async_send_to(
+          boost::asio::buffer(message_), endpoint_,
+          boost::bind(&sender::handle_send_to, this,
+            boost::asio::placeholders::error));
+    }
+  }
+
+private:
+  boost::asio::ip::udp::endpoint endpoint_;
+  boost::asio::ip::udp::socket socket_;
+  boost::asio::deadline_timer timer_;
+  float x_, y_, z_;
+  float roll_, pitch_, yaw_;
+  int message_count_;
+  std::string message_;
+
+};
 
 class Receiver
 { 
@@ -153,15 +231,6 @@ public:
         return projuv;
     }
 
-/*    switch(mode)
-    {
-        case SAVE:
-        savepoints();
-        break;
-        case 2:
-        std::cout << "saving points to file" << std::endl;
-    }*/
-
     void savepoints(/*float xm, float ym, float zm*/)
     {
         //Now we write the points to a text file for visualization processing
@@ -226,9 +295,10 @@ public:
         spinner.start(); 
 
         while(ros::ok())
-        {            
+        {           
 
             if (abs(R(0,0)) < .001 & abs(R(1,0)) < .001)
+            
             {
                 // singularity
                 rpy(0) = 0;
@@ -244,6 +314,13 @@ public:
                 posemsg.angular.z = rpy(2);
            
                 posemsg_pub.publish(posemsg);
+
+                boost::asio::io_service io_service;
+                std::string multicast_address = "235.255.0.1";
+                sender s(io_service, boost::asio::ip::address::from_string(multicast_address), posemsg.linear.x, \
+                                                        posemsg.linear.y, posemsg.linear.z, posemsg.angular.x, \
+                                                        posemsg.angular.y, posemsg.angular.z);
+                io_service.run();
 
 /*                ROS_INFO_STREAM("Head Translation: %s", posemsg.linear);
                 ROS_INFO("Head RPY Angles: %s", posemsg.angular);*/
@@ -286,7 +363,7 @@ public:
         return rpy;
     }
 
-        // Receiver receiver;
+/*        // Receiver receiver;
     void posePublisher()
     {
         static tf::TransformBroadcaster broadcast;
@@ -310,7 +387,7 @@ public:
 
           std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-    }
+    }*/
 
     bool  start()
     {
@@ -344,49 +421,47 @@ public:
 void help()
 {
   
-    ROS_INFO("Error ******************************************************************");
-    ROS_INFO_STREAM( std::setw(20)  << "\nUsage: rosrun vicon_listener vicon_listener" );
-    ROS_INFO_STREAM( std::setw(20) << "To Save facepoints: rosrun vicon_listener vicon_listener -s (or --save)");
+    ROS_INFO_STREAM( "\n\n" 
+                    <<  std::setw('0') << std::setw(35)  <<"Error ******************************************************************\n"
+                    <<  std::setw('0') << std::setw(35)  << "Usage: rosrun vicon_listener vicon_listener <subject_name> <segment_name>\n"
+                    <<  std::setw('0') << std::setw(35)  << "To Save facepoints: rosrun vicon_listener vicon_listener -s (or --save)\n");
 }
 
 
 int main(int argc, char **argv)
 {
+    
+    uint32_t options = 0;
+
+    ros::init(argc, argv, listener, options);
+
+    if (argc != 3)
+      {
+        help();
+      }
+
+    for(size_t i = 1; i < (size_t)argc; ++i)
+    {
+        
+        subject = argv[1];
+        segment = argv[2]; 
+    }
+
+    std::string base_name = "vicon";
+
+    std::string pubname    = base_name + "/" + subject + "/" + segment ;
+
+    ROS_INFO_STREAM("Subscribing to: /" << base_name <<  "/" << pubname);
+
     bool save;
     Receiver::Mode mode = Receiver::SAVE;
     Receiver obj;
-
-    ros::init(argc, argv, "listener");
-    try
-     {
-        if(argc > 1)
-             {
-               help();
-               //ros::spinOnce();
-               return 1;
-             }
-
-         else if (argc == 1)
-         {
-            save = atoi(argv[1]) == 0 ? false : true;
-            mode = Receiver::SAVE;
-            //ros::spinOnce();    
-            return 1;
-         }
-     }
-
-     catch (std::exception& e)
-       {
-         std::cerr << "Exception: " << e.what() << "\n";
-       }
 
     ros::NodeHandle nm;
     ros::Subscriber sub = nm.subscribe("vicon/markers", 1000, &Receiver::callback, &obj );    
 
 
     ros::spin();
-
-    // ros::shutdown();
 
   return 1;
 }

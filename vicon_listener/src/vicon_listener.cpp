@@ -27,7 +27,7 @@ std::string listener = "vicon_listener";
 std::string subject, segment;
 
 const short multicast_port = 30001;
-const int max_message_count = 1;                //because my head can never be more than 2m above the ground :)
+const int max_message_count = 300;                //because my head can never be more than 2m above the ground :)
 
 class sender
 {
@@ -39,7 +39,7 @@ public:
     : endpoint_(multicast_address, multicast_port),
       socket_(io_service, endpoint_.protocol()),
       timer_(io_service), x_(x), y_(y), z_(z), \
-                        roll_(roll), pitch_(pitch), yaw_(yaw), message_count_(0)
+                        roll_(roll), pitch_(pitch), yaw_(yaw)
   {
     std::ostringstream os;
     os << std::fixed << std::setfill ('0') << std::setprecision (4) << x_ 
@@ -57,7 +57,7 @@ public:
 
   void handle_send_to(const boost::system::error_code& error)
   {
-    if (!error && message_count_ < max_message_count)
+    if (!error && z_ > max_message_count)
     {
       timer_.expires_from_now(boost::posix_time::seconds(1));
       timer_.async_wait(
@@ -93,7 +93,6 @@ private:
   boost::asio::deadline_timer timer_;
   float x_, y_, z_;
   float roll_, pitch_, yaw_;
-  int message_count_;
   std::string message_;
 
 };
@@ -102,8 +101,8 @@ class Receiver
 { 
     private:
       std::vector<std::thread> threads;
-      ros::NodeHandle n_pose, priv_nh;     
-      ros::AsyncSpinner spinner;
+      /*ros::NodeHandle n_pose, priv_nh;     
+      ros::AsyncSpinner spinner;*/
 
 public:
     enum Mode
@@ -111,9 +110,9 @@ public:
         SAVE
     };
 
-    Receiver(const ros::NodeHandle &nm = ros::NodeHandle("~"), const ros::NodeHandle &n_pose = ros::NodeHandle("~"), \
-             const ros::NodeHandle &priv_nh = ros::NodeHandle("~") )
-        :  save(false), spinner(1), n_pose("~"), priv_nh(priv_nh), mode(SAVE)
+    Receiver(/*const ros::NodeHandle &nm = ros::NodeHandle("~"), const ros::NodeHandle &n_pose = ros::NodeHandle("~"), \
+             const ros::NodeHandle &priv_nh = ros::NodeHandle("~")*/ )
+        :  save(false) /*spinner(1), n_pose("~"), priv_nh(priv_nh), mode(SAVE)*/
     {  
     }
 
@@ -287,18 +286,13 @@ public:
         float sp, cp;
         MatrixXf Rf = R.cast<float>();
 
-        ros::Publisher posemsg_pub= n_pose.advertise<geometry_msgs::Twist>("pose_" , 1000);
-        ros::Rate loop_rate(5);                       //publish at 5Hz
+        ros::Rate loop_rate(30);                       //publish at 30Hz*/
         geometry_msgs::Twist posemsg;
-
-    
-        spinner.start(); 
 
         while(ros::ok())
         {           
 
-            if (abs(R(0,0)) < .001 & abs(R(1,0)) < .001)
-            
+            if (abs(R(0,0)) < .001 & abs(R(1,0)) < .001)           
             {
                 // singularity
                 rpy(0) = 0;
@@ -312,25 +306,18 @@ public:
                 posemsg.angular.x = rpy(0);
                 posemsg.angular.y = rpy(1);
                 posemsg.angular.z = rpy(2);
-           
-                posemsg_pub.publish(posemsg);
+
+                // ROS_INFO_STREAM("Head Translation: " << posemsg.linear);
+                // ROS_INFO_STREAM("Head RPY Angles: " << posemsg.angular);
 
                 boost::asio::io_service io_service;
-                std::string multicast_address = "235.255.0.1";
+                const std::string multicast_address = "235.255.0.1";
+                
                 sender s(io_service, boost::asio::ip::address::from_string(multicast_address), posemsg.linear.x, \
                                                         posemsg.linear.y, posemsg.linear.z, posemsg.angular.x, \
                                                         posemsg.angular.y, posemsg.angular.z);
                 io_service.run();
 
-/*                ROS_INFO_STREAM("Head Translation: %s", posemsg.linear);
-                ROS_INFO("Head RPY Angles: %s", posemsg.angular);*/
-                for(size_t i = 0; i < threads.size(); ++i)
-                {
-                    threads[i] = std::thread();
-                }
-                posemsg_pub.publish(posemsg);
-
-                //ros::spinOnce();                //to enable callbacks getting called
                 loop_rate.sleep();
             }
 
@@ -349,49 +336,26 @@ public:
                 posemsg.angular.x = rpy(0);
                 posemsg.angular.y = rpy(1);
                 posemsg.angular.z = rpy(2);
+
+
+                // ROS_INFO_STREAM("Head Translation: "<< posemsg.linear);
+                // ROS_INFO_STREAM("Head RPY Angles: "<< posemsg.angular);
            
-                posemsg_pub.publish(posemsg);
+                boost::asio::io_service io_service;
+                const std::string multicast_address = "235.255.0.1";
 
-                //ros::spinOnce();                //to enable callbacks getting called
+                sender s(io_service, boost::asio::ip::address::from_string(multicast_address), posemsg.linear.x, \
+                                                        posemsg.linear.y, posemsg.linear.z, posemsg.angular.x, \
+                                                        posemsg.angular.y, posemsg.angular.z);
+                io_service.run();
+
                 loop_rate.sleep();
-            }        
-            ros::waitForShutdown();
-        }
 
-        spinner.stop();
+            }        
+            //ros::waitForShutdown();
+        }
 
         return rpy;
-    }
-
-/*        // Receiver receiver;
-    void posePublisher()
-    {
-        static tf::TransformBroadcaster broadcast;
-        tf::StampedTransform poseOpt;
-        tf::Transform transform;
-        ros::Time now = ros::Time::now();
-
-        tf::Vector3 (facepoints.x, facepoints.y, facepoints.z) ;
-        tf::Quaternion q;
-        q.setRPY(rpy(0), rpy(1), rpy(2));
-        transform.setRotation(q);
-
-        poseOpt = tf::StampedTransform(transform, now, "worldpose", Superchick_name);
-        
-        for(;ros::ok();)
-        {
-          now = ros::Time::now();
-          poseOpt.stamp_ = now;
-
-          broadcast.sendTransform(poseOpt);
-
-          std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-    }*/
-
-    bool  start()
-    {
-        if(publishTF);
     }
 
     private:
@@ -412,10 +376,6 @@ public:
 
         geometry_msgs::Point_<std::allocator<void> > chin, forehead, leftcheek, rightcheek;
     // friend server;                       //somehow I could not get g++ to compile by exposing everything within  Receiver to server
-        bool initialize()
-        {
-            priv_nh.param("publish_tf", publishTF, false);
-        }
 };
 
 void help()
@@ -449,7 +409,7 @@ int main(int argc, char **argv)
 
     std::string base_name = "vicon";
 
-    std::string pubname    = base_name + "/" + subject + "/" + segment ;
+    std::string pubname    = subject + "/" + segment ;
 
     ROS_INFO_STREAM("Subscribing to: /" << base_name <<  "/" << pubname);
 
@@ -459,7 +419,6 @@ int main(int argc, char **argv)
 
     ros::NodeHandle nm;
     ros::Subscriber sub = nm.subscribe("vicon/markers", 1000, &Receiver::callback, &obj );    
-
 
     ros::spin();
 

@@ -5,7 +5,7 @@
 #Vicon Listener
 ##Subscriber to the ROS VICON_SDK
 
-##Author: [Olalekan Ogunmolu](http://lakehanne.github.io) and [Nicholas Gans](http://www.utdallas.edu/~ngans/)
+##Author: [Olalekan Ogunmolu](http://lakehanne.github.io)
 
 ## Introduction
 

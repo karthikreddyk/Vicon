@@ -99,21 +99,32 @@ private:
 
 class Receiver
 { 
-    private:
-      std::vector<std::thread> threads;
-      /*ros::NodeHandle n_pose, priv_nh;     
-      ros::AsyncSpinner spinner;*/
 
+private:
+    float xm, ym, zm;
+    unsigned short port;
+    bool save; 
+    bool publishTF;
+
+    Vector3f rpy;
+    facemidpts facepoints;
+
+    std::string foreheadname, \
+                leftcheekname, \
+                rightcheekname, \
+                chinname;
+
+    geometry_msgs::Point_<std::allocator<void> > chin, forehead, leftcheek, rightcheek;
+    
+    std::vector<std::thread> threads;
+    ros::NodeHandle nm_;
+    ros::Publisher pub;
+// friend server;                       //somehow I could not get g++ to compile by exposing everything within  Receiver to server
 public:
-    enum Mode
-    {
-        SAVE
-    };
-
-    Receiver(/*const ros::NodeHandle &nm = ros::NodeHandle("~"), const ros::NodeHandle &n_pose = ros::NodeHandle("~"), \
-             const ros::NodeHandle &priv_nh = ros::NodeHandle("~")*/ )
-        :  save(false) /*spinner(1), n_pose("~"), priv_nh(priv_nh), mode(SAVE)*/
-    {  
+    Receiver(const ros::NodeHandle nm, bool save )
+        :  nm_(nm), save(save)
+    {          
+        pub  = nm_.advertise<geometry_msgs::Twist>("/vicon/headtwist", 100);
     }
 
     void callback(const vicon_bridge::Markers::ConstPtr& markers_msg)
@@ -149,8 +160,6 @@ public:
         ROS_INFO("\nDestructor Called.");
     }
 
-
-public:
     //Here, I basically find the midpoint of the four pts intersecting at the middle of the face
     facemidpts midpoint(headmarkers markers)                     
     {
@@ -318,6 +327,7 @@ public:
                                                         posemsg.angular.y, posemsg.angular.z);
                 io_service.run();
 
+                pub.publish(posemsg);
                 loop_rate.sleep();
             }
 
@@ -336,10 +346,6 @@ public:
                 posemsg.angular.x = rpy(0);
                 posemsg.angular.y = rpy(1);
                 posemsg.angular.z = rpy(2);
-
-
-                // ROS_INFO_STREAM("Head Translation: "<< posemsg.linear);
-                // ROS_INFO_STREAM("Head RPY Angles: "<< posemsg.angular);
            
                 boost::asio::io_service io_service;
                 const std::string multicast_address = "235.255.0.1";
@@ -348,7 +354,8 @@ public:
                                                         posemsg.linear.y, posemsg.linear.z, posemsg.angular.x, \
                                                         posemsg.angular.y, posemsg.angular.z);
                 io_service.run();
-
+                
+                pub.publish(posemsg);
                 loop_rate.sleep();
 
             }        
@@ -357,25 +364,6 @@ public:
 
         return rpy;
     }
-
-    private:
-        float xm, ym, zm;
-        unsigned short port;
-        bool save; 
-        bool publishTF;
-
-        Vector3f rpy;
-        facemidpts facepoints;
-
-        std::string foreheadname, \
-                    leftcheekname, \
-                    rightcheekname, \
-                    chinname;
-
-        Mode mode;
-
-        geometry_msgs::Point_<std::allocator<void> > chin, forehead, leftcheek, rightcheek;
-    // friend server;                       //somehow I could not get g++ to compile by exposing everything within  Receiver to server
 };
 
 void help()
@@ -394,7 +382,7 @@ int main(int argc, char **argv)
     uint32_t options = 0;
 
     ros::init(argc, argv, listener, options);
-
+    
     if (argc != 3)
       {
         help();
@@ -413,11 +401,11 @@ int main(int argc, char **argv)
 
     ROS_INFO_STREAM("Subscribing to: /" << base_name <<  "/" << pubname);
 
-    bool save;
-    Receiver::Mode mode = Receiver::SAVE;
-    Receiver obj;
-
     ros::NodeHandle nm;
+    bool save;
+    save = nm.getParam("save", save);
+    Receiver  obj(nm, save);
+
     ros::Subscriber sub = nm.subscribe("vicon/markers", 1000, &Receiver::callback, &obj );    
 
     ros::spin();
